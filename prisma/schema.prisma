@@ -1,0 +1,402 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  HOSPITAL
+}
+
+model User {
+  id             String   @id @default(uuid())
+  name           String?
+  email          String   @unique
+  role           Role
+  hashedPassword String
+  createdAt      DateTime @default(now())
+
+  // relations
+  patient        Patient?
+  doctor         Doctor?
+  hospital       Hospital?
+}
+
+model Patient {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique
+  dob       DateTime?
+  gender    String?
+  complaints PatientComplaint[]
+  documents MedicalDocument[]
+  consents   Consent[]
+  timelines  MedicalTimeline[]
+  emergencyAlerts EmergencyAlert[]
+  preferredLanguage String?
+  summaries MedicalSummary[]
+  preConsultationSessions PreConsultationSession[]
+  consultations Consultation[]
+  ayushAssessments AyushAssessment[]
+}
+
+model Doctor {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String   @unique
+  speciality String?
+  credentials DoctorCredential[]
+  consultations Consultation[]
+  verifications DoctorVerification[]
+  ayushAssessments AyushAssessment[]
+  hospitalLinks HospitalDoctor[]
+}
+
+model Hospital {
+  id       String   @id @default(uuid())
+  user     User     @relation(fields: [userId], references: [id])
+  userId   String   @unique
+  address  String?
+  emergencyAlerts EmergencyAlert[]
+  hospitalDoctors HospitalDoctor[]
+}
+
+model DoctorCredential {
+  id        String  @id @default(uuid())
+  doctor    Doctor  @relation(fields: [doctorId], references: [id])
+  doctorId  String
+  type      String
+  detail    String
+}
+
+model Consent {
+  id         String   @id @default(uuid())
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  patientId  String
+  granted    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  granteeDoctorId String?
+  grantedAt DateTime?
+  revokedAt DateTime?
+}
+
+enum ConsultationStatus {
+  PENDING
+  REQUESTED
+  READY
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VerificationStatus {
+  AI_GENERATED
+  REVIEWED
+  VERIFIED
+}
+
+model Consultation {
+  id         String   @id @default(uuid())
+  doctor     Doctor   @relation(fields: [doctorId], references: [id])
+  doctorId   String
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  patientId  String
+  session    PreConsultationSession? @relation(fields: [sessionId], references: [id])
+  sessionId  String? @unique
+  scheduledAt DateTime?
+  status     ConsultationStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ayushAssessment AyushAssessment?
+  emergencyAlerts EmergencyAlert[]
+}
+
+model DoctorVerification {
+  id         String   @id @default(uuid())
+  doctor     Doctor   @relation(fields: [doctorId], references: [id])
+  doctorId   String
+  targetType String
+  targetId   String
+  status     VerificationStatus @default(AI_GENERATED)
+  note       String?
+  createdAt  DateTime @default(now())
+}
+
+model MedicalDocument {
+  id         String   @id @default(uuid())
+  patient    Patient  @relation(fields: [patientId], references: [id])
+  patientId  String
+  title      String
+  url        String
+  category   String?
+  documentDate DateTime?
+  uploadedAt DateTime @default(now())
+  timelines  MedicalTimeline[]
+  extractions ExtractedMedicalData[]
+  processing  DocumentProcessing[]
+}
+
+model PatientComplaint {
+  id          String   @id @default(uuid())
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  patientId   String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  reports     SymptomReport[]
+
+}
+
+model AccessAudit {
+  id          String   @id @default(uuid())
+  actorId     String   // user id who performed action (patient/doctor/hospital)
+  actorRole   String
+  patientId   String
+  doctorId    String?
+  consultationId String?
+  action      String
+  note        String?
+  createdAt   DateTime @default(now())
+}
+model SymptomReport {
+  id         String            @id @default(uuid())
+  complaint  PatientComplaint  @relation(fields: [complaintId], references: [id])
+  complaintId String
+  responses  SymptomResponse[]
+  createdAt  DateTime          @default(now())
+}
+
+model SymptomResponse {
+  id        String @id @default(uuid())
+  report    SymptomReport @relation(fields: [reportId], references: [id])
+  reportId  String
+  question  String
+  answer    String
+}
+
+enum EntryType {
+  DIAGNOSIS
+  MEDICINE
+  INVESTIGATION
+  PROCEDURE
+  FINDING
+}
+
+model MedicalTimeline {
+  id               String   @id @default(uuid())
+  patient          Patient  @relation(fields: [patientId], references: [id])
+  patientId        String
+  title            String
+  details          String?
+  entryType        EntryType
+  date             DateTime @default(now())
+  sourceDocument   MedicalDocument? @relation(fields: [sourceDocumentId], references: [id])
+  sourceDocumentId String?
+  createdAt        DateTime @default(now())
+}
+
+model DocumentProcessing {
+  id         String   @id @default(uuid())
+  document   MedicalDocument @relation(fields: [documentId], references: [id])
+  documentId String
+  status     String   @default("PENDING")
+  error      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ExtractedMedicalData {
+  id           String   @id @default(uuid())
+  document     MedicalDocument @relation(fields: [documentId], references: [id])
+  documentId   String
+  extracted    Json
+  createdAt    DateTime @default(now())
+}
+
+model MedicalSummary {
+  id             String   @id @default(uuid())
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  patientId      String
+  authorId       String?
+  provider       String?
+  version        Int      @default(1)
+  status         String   @default("PENDING")
+  patientSummary String?
+  doctorSummary  Json?
+  note           String?  // any notes or errors
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum QuestionType {
+  TEXT
+  NUMBER
+  YESNO
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+}
+
+model QuestionTemplate {
+  id        String      @id @default(uuid())
+  domain    String
+  key       String      @unique
+  text      String
+  type      QuestionType
+  options   QuestionOption[]
+  sessionQuestions SessionQuestion[]
+}
+
+model QuestionOption {
+  id          String @id @default(uuid())
+  question    QuestionTemplate @relation(fields: [questionId], references: [id])
+  questionId  String
+  value       String
+  label       String
+}
+
+model PreConsultationSession {
+  id        String   @id @default(uuid())
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  patientId String
+  complaint String
+  domain    String?
+  status    String   @default("IN_PROGRESS")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  questions SessionQuestion[]
+  report    PreConsultationReport?
+  consultation Consultation?
+}
+
+model SessionQuestion {
+  id        String   @id @default(uuid())
+  session   PreConsultationSession @relation(fields: [sessionId], references: [id])
+  sessionId String
+  template  QuestionTemplate? @relation(fields: [templateId], references: [id])
+  templateId String?
+  text      String
+  type      QuestionType
+  options   Json?
+  order     Int
+  answered  Boolean @default(false)
+  answer    SessionAnswer?
+}
+
+model SessionAnswer {
+  id        String   @id @default(uuid())
+  question  SessionQuestion @relation(fields: [questionId], references: [id])
+  questionId String @unique
+  value     Json
+  createdAt DateTime @default(now())
+}
+
+model PreConsultationReport {
+  id                 String   @id @default(uuid())
+  session            PreConsultationSession @relation(fields: [sessionId], references: [id])
+  sessionId          String   @unique
+  chiefComplaint     String
+  onsetDuration      String?
+  location           String?
+  severity           String?
+  character          String?
+  frequencyPattern   String?
+  associated         Json?
+  aggravating        Json?
+  relieving          Json?
+  relevantHistory    Json?
+  currentMedications Json?
+  allergies          Json?
+  otherInfo          Json?
+  redFlags           Json?
+  createdAt          DateTime @default(now())
+}
+
+model AyushAssessment {
+  id              String   @id @default(uuid())
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  patientId       String
+  consultation    Consultation? @relation(fields: [consultationId], references: [id])
+  consultationId  String?  @unique
+  doctor          Doctor   @relation(fields: [doctorId], references: [id])
+  doctorId        String
+  prakriti        String?
+  vikriti         String?
+  sara            String?
+  samhanna        String?
+  pramana         String?
+  satmya          String?
+  sattva          String?
+  aharaShakti     String?
+  vyayamaShakti   String?
+  vaya            String?
+  aharaVihara     String?
+  agni            String?
+  nadi            String?
+  note            String?
+  status          VerificationStatus @default(REVIEWED)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum EmergencySeverity {
+  NORMAL
+  URGENT
+  EMERGENCY
+}
+
+enum EmergencyStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum EmergencySource {
+  PRECONSULTATION
+  RED_FLAG
+  AI_CONTEXT
+}
+
+model EmergencyAlert {
+  id            String           @id @default(uuid())
+  patient       Patient          @relation(fields: [patientId], references: [id])
+  patientId     String
+  consultation  Consultation?    @relation(fields: [consultationId], references: [id])
+  consultationId String?
+  hospital      Hospital?        @relation(fields: [hospitalId], references: [id])
+  hospitalId    String?
+  severity      EmergencySeverity @default(NORMAL)
+  status        EmergencyStatus   @default(OPEN)
+  reason        String?
+  source        EmergencySource   @default(RED_FLAG)
+  createdBy     String?           // user id who created the alert
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime          @default(now())
+}
+
+enum HospitalDoctorStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model HospitalDoctor {
+  id         String   @id @default(uuid())
+  hospital   Hospital @relation(fields: [hospitalId], references: [id])
+  hospitalId String
+  doctor     Doctor   @relation(fields: [doctorId], references: [id])
+  doctorId   String
+  status     HospitalDoctorStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+}

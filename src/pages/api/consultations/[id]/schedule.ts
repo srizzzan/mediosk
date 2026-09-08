@@ -1,0 +1,29 @@
+import { getSession } from 'next-auth/react'
+import { NextApiRequest, NextApiResponse } from 'next'
+import { z } from 'zod'
+import { prisma } from '../../../../lib/prisma'
+
+const Body = z.object({ scheduledAt: z.string().optional() })
+
+export default async function handler(req:NextApiRequest,res:NextApiResponse){
+  if (req.method !== 'PATCH') return res.status(405).end()
+  const session = await getSession({ req })
+  if (!session) return res.status(401).json({ error: 'unauthenticated' })
+  const role = (session as any).user.role
+  if (role !== 'DOCTOR' && role !== 'HOSPITAL') return res.status(403).json({ error: 'forbidden' })
+
+  const { id } = req.query as any
+  const parsed = Body.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'invalid' })
+
+  const consultation = await prisma.consultation.findUnique({ where: { id } })
+  if (!consultation) return res.status(404).json({ error: 'not_found' })
+
+  const data:any = {}
+  if (parsed.data.scheduledAt) data.scheduledAt = new Date(parsed.data.scheduledAt)
+  data.status = 'SCHEDULED'
+
+  const updated = await prisma.consultation.update({ where: { id }, data })
+  await prisma.accessAudit.create({ data: { actorId: (session as any).user.id, actorRole: role, patientId: consultation.patientId, doctorId: consultation.doctorId, consultationId: id, action: 'CONSULTATION_SCHEDULED', note: parsed.data.scheduledAt || null } })
+  return res.json({ consultation: updated })
+}
