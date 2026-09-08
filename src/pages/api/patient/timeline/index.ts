@@ -1,6 +1,9 @@
 import { getSession } from 'next-auth/react'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../lib/prisma'
+import { z } from 'zod'
+
+const BodySchema = z.object({ title: z.string().min(1), details: z.string().optional(), entryType: z.enum(['DIAGNOSIS','MEDICINE','INVESTIGATION','PROCEDURE','FINDING']), date: z.string().optional(), sourceDocumentId: z.string().uuid().optional() })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSession({ req })
@@ -17,7 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { title, details, entryType, date, sourceDocumentId } = req.body
+    const parsed = BodySchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid body', details: parsed.error.errors })
+    const { title, details, entryType, date, sourceDocumentId } = parsed.data
     // validate sourceDocument ownership if provided
     if (sourceDocumentId) {
       const doc = await prisma.medicalDocument.findUnique({ where: { id: sourceDocumentId } })

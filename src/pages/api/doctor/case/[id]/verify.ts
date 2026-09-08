@@ -1,6 +1,9 @@
 import { getSession } from 'next-auth/react'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../../lib/prisma'
+import { z } from 'zod'
+
+const BodySchema = z.object({ targetType: z.string(), targetId: z.string().uuid(), status: z.enum(['AI_GENERATED','REVIEWED','VERIFIED']), note: z.string().optional() })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse){
   if (req.method !== 'POST') return res.status(405).end()
@@ -16,8 +19,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const doctor = await prisma.doctor.findUnique({ where: { userId } })
   if (!doctor) return res.status(404).json({ error: 'Doctor not found' })
 
-  const { targetType, targetId, status, note } = req.body
-  if (!targetType || !targetId || !status) return res.status(400).json({ error: 'Missing fields' })
+  const parsed = BodySchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid body', details: parsed.error.errors })
+  const { targetType, targetId, status, note } = parsed.data
 
   // verify that consultation exists and doctor assigned or consent
   const consultation = await prisma.consultation.findUnique({ where: { id } })

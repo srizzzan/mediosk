@@ -18,9 +18,13 @@ if (provider === 's3') {
 }
 
 export async function uploadFile(buffer: Buffer, key: string, contentType: string) {
+  // sanitize key to prevent path traversal
+  key = key.replace(/\.\.+/g, '')
+    key = key.replace(/(^\/+|\/+$)/g, '')
+  key = key.split('..').join('')
   if (provider === 's3' && s3) {
     const bucket = process.env.S3_BUCKET!
-    const cmd = new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: contentType })
+    const cmd = new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: contentType, ACL: 'private' })
     await s3.send(cmd)
     const endpoint = process.env.S3_ENDPOINT
     if (endpoint) {
@@ -33,17 +37,26 @@ export async function uploadFile(buffer: Buffer, key: string, contentType: strin
   const uploadsDir = path.join(process.cwd(), 'uploads')
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
   const filePath = path.join(uploadsDir, key)
-  fs.writeFileSync(filePath, buffer)
+  const resolved = path.resolve(filePath)
+  if (!resolved.startsWith(path.resolve(uploadsDir))) throw new Error('Invalid upload key')
+  fs.writeFileSync(resolved, buffer, { mode: 0o600 })
   return `/uploads/${key}`
 }
 
 export async function deleteFile(key: string) {
+  // sanitize key
+  key = key.replace(/\.\.+/g, '')
+    key = key.replace(/(^\/+|\/+$)/g, '')
+  key = key.split('..').join('')
   if (provider === 's3' && s3) {
     const bucket = process.env.S3_BUCKET!
     const cmd = new DeleteObjectCommand({ Bucket: bucket, Key: key })
     await s3.send(cmd)
     return
   }
-  const filePath = path.join(process.cwd(), 'uploads', key)
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  const uploadsDir = path.join(process.cwd(), 'uploads')
+  const filePath = path.join(uploadsDir, key)
+  const resolved = path.resolve(filePath)
+  if (!resolved.startsWith(path.resolve(uploadsDir))) throw new Error('Invalid delete key')
+  if (fs.existsSync(resolved)) fs.unlinkSync(resolved)
 }

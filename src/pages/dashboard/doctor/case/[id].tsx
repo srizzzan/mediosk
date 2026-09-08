@@ -27,6 +27,11 @@ export default function CaseSheet(){
   return (
     <main className="container py-8">
       <h1 className="text-2xl font-semibold mb-4">Case: {patient.user.name || patient.user.email}</h1>
+      <div className="mb-4">
+        {(caseData.status === 'SCHEDULED' || caseData.status === 'IN_PROGRESS' || caseData.status === 'READY') && (
+          <a href={`/dashboard/consultation/${caseData.id}`} className="px-3 py-2 bg-sky-600 text-white rounded">Join Consultation</a>
+        )}
+      </div>
       <section className="mb-4">
         <h2 className="font-semibold">Patient Information</h2>
         <div>DOB: {patient.dob}</div>

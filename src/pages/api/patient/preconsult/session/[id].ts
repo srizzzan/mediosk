@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../../lib/prisma'
 import { z } from 'zod'
 
-const AnswerSchema = z.object({ value: z.any() })
+const AnswerSchema = z.object({ questionId: z.string().uuid(), value: z.any() })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSession({ req })
@@ -26,10 +26,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'POST') {
     // submit answer for a question
-    const body = req.body
-    const parsed = AnswerSchema.safeParse(body)
-    if (!parsed.success) return res.status(400).json({ error: 'Invalid answer' })
-    const { questionId, value } = body as any
+    const parsed = AnswerSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid answer', details: parsed.error.errors })
+    const { questionId, value } = parsed.data
     const q = await prisma.sessionQuestion.findUnique({ where: { id: questionId } })
     if (!q || q.sessionId !== id) return res.status(400).json({ error: 'Invalid question' })
     // store answer

@@ -3,6 +3,9 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../lib/prisma'
 import { detectDomainFromComplaint } from '../../../../lib/domain'
 import { BANK } from '../../../../lib/questionBank'
+import { z } from 'zod'
+
+const BodySchema = z.object({ complaint: z.string().min(3) })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -11,8 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userId = (session as any).user?.id
   if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { complaint } = req.body
-  if (!complaint || typeof complaint !== 'string') return res.status(400).json({ error: 'Complaint required' })
+  const parsed = BodySchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid body', details: parsed.error.errors })
+  const { complaint } = parsed.data
 
   const patient = await prisma.patient.findUnique({ where: { userId } })
   if (!patient) return res.status(404).json({ error: 'Patient not found' })

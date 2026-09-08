@@ -18,6 +18,9 @@ export default function DoctorDashboard(){
             </div>
             <div className="space-x-2">
               <Link href={`/dashboard/doctor/case/${c.id}`} className="px-3 py-2 bg-sky-600 text-white rounded">Open Case</Link>
+              {(c.status === 'SCHEDULED' || c.status === 'IN_PROGRESS' || c.status === 'READY') && (
+                <Link href={`/dashboard/consultation/${c.id}`} className="px-3 py-2 border rounded">Join Consultation</Link>
+              )}
             </div>
           </div>
         ))}

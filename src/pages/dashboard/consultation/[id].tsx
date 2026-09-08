@@ -22,6 +22,9 @@ export default function ConsultationPage({ id, initial }: any){
   }
 
   async function join(){
+    // ask server for join authorization before acquiring media
+    const auth = await fetch(`/api/consultations/${id}/join`,{ method: 'POST' })
+    if (!auth.ok){ const j = await auth.json().catch(()=>({})); alert('Not authorized to join: '+(j?.error||auth.status)); return }
     setConnState('starting')
     // get media
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
@@ -66,6 +69,7 @@ export default function ConsultationPage({ id, initial }: any){
     setConnState('idle')
     // notify server for audit
     await fetch(`/api/consultations/${id}/signal`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ type:'control', payload: { event: 'left' } })})
+    await fetch(`/api/consultations/${id}/leave`,{ method: 'POST' })
   }
 
   async function toggleAudio(){ if (!localStreamRef.current) return; const tracks = localStreamRef.current.getAudioTracks(); tracks.forEach(t=>t.enabled = !t.enabled) }

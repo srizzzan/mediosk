@@ -1,6 +1,9 @@
 import { getSession } from 'next-auth/react'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../lib/prisma'
+import { z } from 'zod'
+
+const PutSchema = z.object({ name: z.string().optional(), dob: z.string().optional(), gender: z.string().optional(), preferredLanguage: z.string().optional() })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSession({ req })
@@ -16,10 +19,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PUT') {
-    const { name, dob, gender, preferredLanguage } = req.body
+    const parsed = PutSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid body', details: parsed.error.errors })
+    const { name, dob, gender, preferredLanguage } = parsed.data
     // update user name and patient fields
-    await prisma.user.update({ where: { id: userId }, data: { name } })
+    if (name) await prisma.user.update({ where: { id: userId }, data: { name } })
     const updated = await prisma.patient.update({ where: { id: patient.id }, data: { dob: dob ? new Date(dob) : null, gender, preferredLanguage } })
+    await prisma.accessAudit.create({ data: { actorId: userId, actorRole: 'PATIENT', patientId: patient.id, action: 'PROFILE_UPDATED', note: 'Patient updated profile' } })
     return res.json({ patient: updated })
   }
 

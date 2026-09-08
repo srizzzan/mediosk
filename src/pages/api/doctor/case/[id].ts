@@ -21,8 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Access control: allow if assigned to doctor or patient consent granted to this doctor
   const assigned = consultation.doctorId === doctor.id
-  const consent = await prisma.consent.findFirst({ where: { patientId: consultation.patientId, granteeDoctorId: doctor.id, granted: true } })
-  if (!assigned && !consent) return res.status(403).json({ error: 'Access denied' })
+  const consent = await prisma.consent.findFirst({ where: { patientId: consultation.patientId, granteeDoctorId: doctor.id }, orderBy: { createdAt: 'desc' } })
+  if (!assigned && !(consent && consent.granted === true)) return res.status(403).json({ error: 'Access denied' })
 
   // Gather AI/extracted items and latest summary
   const summaries = await prisma.medicalSummary.findMany({ where: { patientId: consultation.patientId }, orderBy: { createdAt: 'desc' }, take: 5 })
