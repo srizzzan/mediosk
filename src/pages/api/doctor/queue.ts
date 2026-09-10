@@ -13,12 +13,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const doctor = await prisma.doctor.findUnique({ where: { userId } })
   if (!doctor) return res.status(404).json({ error: 'Doctor profile not found' })
 
-  const start = new Date()
-  start.setHours(0,0,0,0)
-  const end = new Date()
-  end.setHours(23,59,59,999)
-
-  const consultations = await prisma.consultation.findMany({ where: { doctorId: doctor.id, scheduledAt: { gte: start, lte: end } }, include: { patient: { include: { user: true } }, session: true } })
+  const consultations = await prisma.consultation.findMany({
+    where: { doctorId: doctor.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+    include: { patient: { include: { user: true } }, session: { include: { report: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
 
   return res.json({ consultations })
 }

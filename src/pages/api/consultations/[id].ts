@@ -13,7 +13,7 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
   const uid = (session as any).user.id
   const role = (session as any).user.role
   // only assigned doctor or patient may view; hospital allowed only if explicit audit exists
-  if (role === 'DOCTOR' && c.doctor.userId !== uid) {
+  if (role === 'DOCTOR' && (!c.doctor || c.doctor.userId !== uid)) {
     // doctor may still view if they have active consent for this patient
     const doctor = await prisma.doctor.findUnique({ where: { userId: uid } })
     if (!doctor) return res.status(403).json({ error: 'forbidden' })

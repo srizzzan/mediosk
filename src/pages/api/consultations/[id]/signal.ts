@@ -19,7 +19,7 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
   const role = (session as any).user.role
   const uid = (session as any).user.id
   const patient = await prisma.patient.findUnique({ where: { id: consultation.patientId } })
-  const doctor = await prisma.doctor.findUnique({ where: { id: consultation.doctorId } })
+  const doctor = consultation.doctorId ? await prisma.doctor.findUnique({ where: { id: consultation.doctorId } }) : null
   const userAllowed = (role === 'PATIENT' && patient?.userId === uid) || (role === 'DOCTOR' && doctor?.userId === uid) || role === 'HOSPITAL'
   if (!userAllowed) return res.status(403).json({ error: 'forbidden' })
 

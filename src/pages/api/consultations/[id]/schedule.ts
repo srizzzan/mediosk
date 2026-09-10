@@ -18,6 +18,7 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
 
   const consultation = await prisma.consultation.findUnique({ where: { id } })
   if (!consultation) return res.status(404).json({ error: 'not_found' })
+  if (!consultation.doctorId) return res.status(409).json({ error: 'consultation_unassigned' })
 
   const data:any = {}
   if (parsed.data.scheduledAt) data.scheduledAt = new Date(parsed.data.scheduledAt)

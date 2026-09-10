@@ -88,7 +88,7 @@ function HospitalQueue(){
   useEffect(()=>{ load(); loadDoctors() },[])
   async function load(){ const r=await fetch('/api/hospital/queue'); const j=await r.json(); setConsultations(j.consultations||[]) }
   async function loadDoctors(){ const r=await fetch('/api/hospital/doctors'); const j=await r.json(); setDoctors(j.doctors||[]) }
-  async function assign(consult:any, doctorId:string){ await fetch('/api/consultations/assign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ doctorId, patientId: consult.patient.id })}); await load() }
+  async function assign(consult:any, doctorId:string){ await fetch('/api/consultations/assign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ consultationId: consult.id, doctorId })}); await load() }
   return (
     <div>
       <h2 className="font-semibold mb-2">Patient / Consultation Queue</h2>
@@ -97,13 +97,13 @@ function HospitalQueue(){
           <div key={c.id} className="p-3 border rounded">
             <div className="font-semibold">{c.status} — {c.patient?.user?.name || c.patient?.user?.email}</div>
             <div className="text-sm">Complaint: {c.session?.report?.chiefComplaint || c.session?.complaint}</div>
-            <div className="mt-2">
+            {c.status === 'REQUESTED' && <div className="mt-2">
               <select id={`assign-${c.id}`} className="border p-1 mr-2">
                 <option value="">Assign to...</option>
                 {doctors.map(d=> <option key={d.id} value={d.doctor.id}>{d.doctor.user?.name || d.doctor.user?.email}</option>)}
               </select>
               <button onClick={async()=>{ const sel:any = document.getElementById(`assign-${c.id}`) as HTMLSelectElement; if(sel.value) await assign(c, sel.value) }} className="px-3 py-2 bg-sky-600 text-white rounded">Assign</button>
-            </div>
+            </div>}
           </div>
         ))}
       </div>

@@ -15,8 +15,18 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
   const links = await prisma.hospitalDoctor.findMany({ where: { hospitalId: hospital.id } })
   const doctorIds = links.map((l:any)=>l.doctorId)
 
-  // Fetch consultations assigned to these doctors
-  const consultations = await prisma.consultation.findMany({ where: { doctorId: { in: doctorIds }, status: { in: ['PENDING','READY','IN_PROGRESS'] } }, include: { patient: { include: { user: true } }, session: { include: { report: true } } }, orderBy: { createdAt: 'asc' } })
+  // Linked doctors' active consultations plus the unassigned intake pool.
+  // A REQUESTED consultation has no doctor yet, so it cannot belong to a different hospital's doctor queue.
+  const consultations = await prisma.consultation.findMany({
+    where: {
+      OR: [
+        { doctorId: { in: doctorIds }, status: { in: ['PENDING', 'READY', 'IN_PROGRESS', 'SCHEDULED'] } },
+        { doctorId: null, status: 'REQUESTED' },
+      ],
+    },
+    include: { patient: { include: { user: true } }, session: { include: { report: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
 
   return res.json({ consultations })
 }

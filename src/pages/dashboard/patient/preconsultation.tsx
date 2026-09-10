@@ -11,6 +11,8 @@ export default function PreConsultationPage(){
   const [locationDenied, setLocationDenied] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submittedConsultation, setSubmittedConsultation] = useState<any>(null)
   const [voiceMode, setVoiceMode] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [listening, setListening] = useState(false)
@@ -69,12 +71,29 @@ export default function PreConsultationPage(){
   }
 
   async function finish(){
-    await fetch(`/api/patient/preconsult/session/${sessionId}`,{method:'PUT'})
+    const completion = await fetch(`/api/patient/preconsult/session/${sessionId}`,{method:'PUT'})
+    if (!completion.ok) {
+      const body = await completion.json().catch(()=>({}))
+      alert(body.error || 'Unable to complete pre-consultation')
+      return
+    }
     await loadSession(sessionId!)
     // run emergency detection and show result
     const det = await fetch('/api/emergency/detect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ sessionId, createAlert: false })})
     const detJson = await det.json()
     setEmergencyResult(detJson)
+  }
+
+  async function submitConsultation(){
+    setSubmitting(true)
+    const response = await fetch(`/api/patient/preconsult/session/${sessionId}/submit`, { method: 'POST' })
+    const body = await response.json().catch(()=>({}))
+    setSubmitting(false)
+    if (!response.ok) {
+      alert(body.error || 'Unable to submit consultation request')
+      return
+    }
+    setSubmittedConsultation(body.consultation)
   }
 
   async function openHospitalPicker(){
@@ -121,6 +140,7 @@ export default function PreConsultationPage(){
   if (!sessionData) return <div className="container py-8">Loading...</div>
 
   const q = sessionData.session.questions.find((x:any)=>!x.answered)
+  const submitted = submittedConsultation || sessionData.session.consultation
 
   return (
     <main className="container py-8">
@@ -174,7 +194,9 @@ export default function PreConsultationPage(){
       ) : (
         <div className="max-w-md">
           <div className="mb-2">All questions answered.</div>
-          <button onClick={finish} className="px-3 py-2 bg-sky-600 text-white rounded">Finish and create Symptom Report</button>
+          {!sessionData.session.report && <button onClick={finish} className="px-3 py-2 bg-sky-600 text-white rounded">Finish and create Symptom Report</button>}
+          {sessionData.session.report && !submitted && <button disabled={submitting} onClick={submitConsultation} className="px-3 py-2 bg-sky-600 text-white rounded">{submitting ? 'Submitting...' : 'Submit Consultation Request'}</button>}
+          {submitted && <div className="mt-2 text-green-700">Consultation request submitted.</div>}
           {emergencyResult && (
             <div className="mt-4 p-3 border rounded bg-yellow-50">
               <div className="font-semibold">Emergency check: {emergencyResult.severity}</div>

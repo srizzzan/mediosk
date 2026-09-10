@@ -105,8 +105,8 @@ enum VerificationStatus {
 
 model Consultation {
   id         String   @id @default(uuid())
-  doctor     Doctor   @relation(fields: [doctorId], references: [id])
-  doctorId   String
+  doctor     Doctor?  @relation(fields: [doctorId], references: [id])
+  doctorId   String?
   patient    Patient  @relation(fields: [patientId], references: [id])
   patientId  String
   session    PreConsultationSession? @relation(fields: [sessionId], references: [id])

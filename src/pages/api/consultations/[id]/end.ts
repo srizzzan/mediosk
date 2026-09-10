@@ -12,6 +12,7 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
   const { id } = req.query as any
   const consultation = await prisma.consultation.findUnique({ where: { id } })
   if (!consultation) return res.status(404).json({ error: 'not_found' })
+  if (!consultation.doctorId) return res.status(409).json({ error: 'consultation_unassigned' })
   const doctor = await prisma.doctor.findUnique({ where: { id: consultation.doctorId } })
   if (!doctor) return res.status(404).json({ error: 'doctor_not_found' })
   if (role === 'DOCTOR' && (session as any).user.id !== doctor.userId) return res.status(403).json({ error: 'forbidden' })
