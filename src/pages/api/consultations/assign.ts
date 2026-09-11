@@ -1,53 +1,124 @@
-import { getSession } from 'next-auth/react'
+import { getToken } from 'next-auth/jwt'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../lib/prisma'
 import { z } from 'zod'
 
-const BodySchema = z.object({ consultationId: z.string().uuid(), doctorId: z.string().uuid(), scheduledAt: z.string().optional() })
+const BodySchema = z.object({
+  consultationId: z.string().uuid(),
+})
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse){
-  if (req.method !== 'POST') return res.status(405).end()
-  const session = await getSession({ req })
-  if (!session) return res.status(401).json({ error: 'Unauthorized' })
-  const userId = (session as any).user?.id
-  const role = (session as any).user?.role
-  if (role !== 'DOCTOR' && role !== 'HOSPITAL') return res.status(403).json({ error: 'Forbidden' })
-
-  const parsed = BodySchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid body', details: parsed.error.errors })
-  const { consultationId, doctorId, scheduledAt } = parsed.data
-
-  const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } })
-  if (!doctor) return res.status(404).json({ error: 'Doctor not found' })
-
-  if (role === 'HOSPITAL') {
-    const hospital = await prisma.hospital.findUnique({ where: { userId } })
-    if (!hospital) return res.status(404).json({ error: 'Hospital not found' })
-    const link = await prisma.hospitalDoctor.findFirst({ where: { hospitalId: hospital.id, doctorId: doctor.id } })
-    if (!link) return res.status(403).json({ error: 'Doctor is not linked to this hospital' })
-  } else if (doctor.userId !== userId) {
-    return res.status(403).json({ error: 'Doctors may only assign themselves' })
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      error: 'Method not allowed',
+    })
   }
 
-  const consultation = await prisma.$transaction(async (tx) => {
-    const request = await tx.consultation.findUnique({ where: { id: consultationId } })
-    if (!request) return { error: 'CONSULTATION_NOT_FOUND' as const }
-    if (request.status !== 'REQUESTED' || request.doctorId !== null) return { error: 'CONSULTATION_NOT_ASSIGNABLE' as const }
-
-    const assigned = await tx.consultation.update({
-      where: { id: request.id },
-      data: { doctorId: doctor.id, scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined, status: 'READY' },
-    })
-    await tx.accessAudit.create({
-      data: { actorId: userId, actorRole: role, patientId: request.patientId, doctorId: doctor.id, consultationId: assigned.id, action: 'ASSIGNED', note: `Assigned by ${role}` },
-    })
-    return { assigned }
-  }).catch((error) => {
-    throw error
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
   })
 
-  if ('error' in consultation) {
-    return res.status(consultation.error === 'CONSULTATION_NOT_FOUND' ? 404 : 409).json({ error: consultation.error })
+  if (!token) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+    })
   }
-  return res.json({ consultation: consultation.assigned })
+
+  const userId = token.id as string
+  const role = token.role as string
+
+  if (!userId) {
+    return res.status(401).json({
+      error: 'Unauthorized: missing user id',
+    })
+  }
+
+  if (role !== 'DOCTOR') {
+    return res.status(403).json({
+      error: 'Only doctors can assign consultations',
+    })
+  }
+
+  const parsed = BodySchema.safeParse(req.body)
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid consultationId',
+      details: parsed.error.errors,
+    })
+  }
+
+  const { consultationId } = parsed.data
+
+  const doctor = await prisma.doctor.findUnique({
+    where: {
+      userId,
+    },
+  })
+
+  if (!doctor) {
+    return res.status(404).json({
+      error: 'Doctor profile not found',
+    })
+  }
+
+  const consultation = await prisma.consultation.findUnique({
+    where: {
+      id: consultationId,
+    },
+  })
+
+  if (!consultation) {
+    return res.status(404).json({
+      error: 'Consultation not found',
+    })
+  }
+
+  if (consultation.status !== 'REQUESTED') {
+    return res.status(409).json({
+      error: 'Consultation is no longer available for assignment',
+    })
+  }
+
+  if (consultation.doctorId) {
+    return res.status(409).json({
+      error: 'Consultation is already assigned',
+    })
+  }
+
+  const updated = await prisma.consultation.update({
+    where: {
+      id: consultationId,
+    },
+    data: {
+      doctorId: doctor.id,
+      status: 'READY',
+      scheduledAt: new Date(),
+    },
+    include: {
+      patient: {
+        include: {
+          user: true,
+        },
+      },
+      doctor: {
+        include: {
+          user: true,
+        },
+      },
+      session: {
+        include: {
+          report: true,
+        },
+      },
+    },
+  })
+
+  return res.status(200).json({
+    consultation: updated,
+  })
 }

@@ -21,13 +21,32 @@ export default function PreConsultationPage(){
   const recognizerRef = useRef<any>(null)
 
   async function start(){
-    setLoading(true)
-    const res = await fetch('/api/patient/preconsult/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ complaint })})
+  setLoading(true)
+
+  try {
+    const res = await fetch('/api/patient/preconsult/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ complaint })
+    })
+
     const data = await res.json()
-    setSessionId(data.sessionId)
+
+    if (!res.ok || !data.sessionId) {
+      console.error('Pre-consultation start failed:', data)
+      alert(data.error || 'Could not start pre-consultation')
+      return
+    }
+
     await loadSession(data.sessionId)
+    setSessionId(data.sessionId)
+  } catch (error) {
+    console.error('Pre-consultation start error:', error)
+    alert('Could not connect to the server. Check the terminal for errors.')
+  } finally {
     setLoading(false)
   }
+}
 
   async function loadSession(id:string){
     const res = await fetch(`/api/patient/preconsult/session/${id}`)
@@ -39,10 +58,31 @@ export default function PreConsultationPage(){
     return ()=>{ if (recognizerRef.current && recognizerRef.current.isSupported) recognizerRef.current.stop() }
   },[])
 
-  async function answer(questionId:string, value:any){
-    await fetch(`/api/patient/preconsult/session/${sessionId}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ questionId, value })})
+  async function answer(questionId: string, value: any) {
+  try {
+    const res = await fetch(
+      `/api/patient/preconsult/session/${sessionId}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ questionId, value })
+      }
+    )
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      console.error('Submit answer failed:', data)
+      alert(data.error || 'Could not submit answer')
+      return
+    }
+
     await loadSession(sessionId!)
+  } catch (error) {
+    console.error('Submit answer error:', error)
+    alert('Could not submit answer. Check the terminal for errors.')
   }
+}
 
   function playQuestion(text:string){
     if (!canUseSpeechSynthesis()) return

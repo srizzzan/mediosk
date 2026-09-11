@@ -1,4 +1,4 @@
-import { getSession } from 'next-auth/react'
+import { getToken } from 'next-auth/jwt'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../../lib/prisma'
 import { z } from 'zod'
@@ -17,10 +17,24 @@ function asOptionalText(value: unknown): string | undefined {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req })
-  if (!session) return res.status(401).json({ error: 'Unauthorized' })
-  if ((session as any).user?.role !== 'PATIENT') return res.status(403).json({ error: 'Forbidden' })
-  const userId = (session as any).user?.id
+  const token = await getToken({
+  req,
+  secret: process.env.NEXTAUTH_SECRET
+})
+
+if (!token) {
+  return res.status(401).json({ error: 'Unauthorized' })
+}
+
+if (token.role !== 'PATIENT') {
+  return res.status(403).json({ error: 'Forbidden' })
+}
+
+const userId = token.id as string
+
+if (!userId) {
+  return res.status(401).json({ error: 'Unauthorized: missing user id' })
+}
   if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
   const { id } = req.query

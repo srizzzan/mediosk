@@ -12,6 +12,23 @@ export default async function handler(req:NextApiRequest,res:NextApiResponse){
   const patient = await prisma.patient.findUnique({ where: { userId: (session as any).user.id } })
   if (!patient) return res.status(404).json({ error: 'patient_not_found' })
 
-  const consultations = await prisma.consultation.findMany({ where: { patientId: patient.id, status: { in: ['SCHEDULED','IN_PROGRESS','READY'] } }, include: { doctor: { include: { user: true } } }, orderBy: { scheduledAt: 'asc' } })
+ const consultations = await prisma.consultation.findMany({
+  where: {
+    patientId: patient.id,
+    status: {
+      in: ['REQUESTED', 'SCHEDULED', 'IN_PROGRESS', 'READY']
+    }
+  },
+  include: {
+    doctor: {
+      include: {
+        user: true
+      }
+    }
+  },
+  orderBy: {
+    scheduledAt: 'asc'
+  }
+})
   return res.json({ consultations })
 }

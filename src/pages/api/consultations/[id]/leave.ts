@@ -1,32 +1,110 @@
-import { getSession } from 'next-auth/react'
+import { getToken } from 'next-auth/jwt'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '../../../../lib/prisma'
 
-export default async function handler(req:NextApiRequest,res:NextApiResponse){
-  if (req.method !== 'POST') return res.status(405).end()
-  const { id } = req.query as any
-  const session = await getSession({ req })
-  if (!session) return res.status(401).json({ error: 'unauthenticated' })
-  const role = (session as any).user.role
-  const uid = (session as any).user.id
-
-  const consultation = await prisma.consultation.findUnique({ where: { id } })
-  if (!consultation) return res.status(404).json({ error: 'not_found' })
-
-  // basic RBAC: record leave only for participants
-  if (role === 'PATIENT'){
-    const patient = await prisma.patient.findUnique({ where: { userId: uid } })
-    if (!patient || patient.id !== consultation.patientId) return res.status(403).json({ error: 'forbidden' })
-  } else if (role === 'DOCTOR'){
-    const doctor = await prisma.doctor.findUnique({ where: { userId: uid } })
-    if (!doctor) return res.status(403).json({ error: 'forbidden' })
-  } else if (role === 'HOSPITAL'){
-    const audit = await prisma.accessAudit.findFirst({ where: { actorId: uid, consultationId: id, action: { in: ['CONSULTATION_JOIN_ALLOWED','CONSULTATION_JOIN_AUTHORIZED'] } } })
-    if (!audit) return res.status(403).json({ error: 'forbidden' })
-  } else {
-    return res.status(403).json({ error: 'forbidden' })
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).end()
   }
 
-  await prisma.accessAudit.create({ data: { actorId: uid, actorRole: role, patientId: consultation.patientId, doctorId: consultation.doctorId, consultationId: id, action: 'CONSULTATION_LEFT' } })
-  return res.json({ ok: true })
+  const { id } = req.query as { id: string }
+
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+  })
+
+  if (!token) {
+    return res.status(401).json({
+      error: 'unauthenticated',
+    })
+  }
+
+  const role = String(token.role)
+  const uid = String(token.id)
+
+  const consultation = await prisma.consultation.findUnique({
+    where: { id },
+  })
+
+  if (!consultation) {
+    return res.status(404).json({
+      error: 'not_found',
+    })
+  }
+
+  // Basic RBAC: only participants can leave.
+  if (role === 'PATIENT') {
+    const patient = await prisma.patient.findUnique({
+      where: {
+        userId: uid,
+      },
+    })
+
+    if (
+      !patient ||
+      patient.id !== consultation.patientId
+    ) {
+      return res.status(403).json({
+        error: 'forbidden',
+      })
+    }
+  } else if (role === 'DOCTOR') {
+    const doctor = await prisma.doctor.findUnique({
+      where: {
+        userId: uid,
+      },
+    })
+
+    if (
+      !doctor ||
+      doctor.id !== consultation.doctorId
+    ) {
+      return res.status(403).json({
+        error: 'forbidden',
+      })
+    }
+  } else if (role === 'HOSPITAL') {
+    const audit =
+      await prisma.accessAudit.findFirst({
+        where: {
+          actorId: uid,
+          consultationId: id,
+          action: {
+            in: [
+              'CONSULTATION_JOIN_ALLOWED',
+              'CONSULTATION_JOIN_AUTHORIZED',
+            ],
+          },
+        },
+      })
+
+    if (!audit) {
+      return res.status(403).json({
+        error: 'forbidden',
+      })
+    }
+  } else {
+    return res.status(403).json({
+      error: 'forbidden',
+    })
+  }
+
+  await prisma.accessAudit.create({
+    data: {
+      actorId: uid,
+      actorRole: role,
+      patientId: consultation.patientId,
+      doctorId: consultation.doctorId,
+      consultationId: id,
+      action: 'CONSULTATION_LEFT',
+    },
+  })
+
+  return res.json({
+    ok: true,
+  })
 }
